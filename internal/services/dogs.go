@@ -2,9 +2,9 @@ package services
 
 import (
 	"context"
-	"fmt"
+	"errors"
 
-	"github.com/one-byte-data/go-api-sample/internal/models"
+	"github.com/innovative-io/go-api-sample/internal/models"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -12,8 +12,9 @@ import (
 
 type DogsService interface {
 	Add(ctx context.Context, dog *models.Dog) (*uuid.UUID, error)
+	Count(ctx context.Context) (int64, error)
 	Delete(ctx context.Context, id uuid.UUID) error
-	Get(ctx context.Context, filter interface{}) ([]models.Dog, error)
+	Get(ctx context.Context) ([]models.Dog, error)
 	GetOne(ctx context.Context, id uuid.UUID) (*models.Dog, error)
 	Update(ctx context.Context, id uuid.UUID, dog *models.Dog) error
 }
@@ -41,12 +42,20 @@ func (s *dogsService) Delete(ctx context.Context, id uuid.UUID) error {
 		return err
 	}
 	if db.RowsAffected < 1 {
-		return fmt.Errorf("row with id=%v cannot be deleted because it doesn't exist", id)
+		return ErrNotFound
 	}
 	return nil
 }
 
-func (s *dogsService) Get(ctx context.Context, filter interface{}) ([]models.Dog, error) {
+func (s *dogsService) Count(ctx context.Context) (int64, error) {
+	var count int64
+	if err := s.db.Model(&models.Dog{}).Count(&count).Error; err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+func (s *dogsService) Get(ctx context.Context) ([]models.Dog, error) {
 	dogs := make([]models.Dog, 0)
 	if err := s.db.Find(&dogs).Error; err != nil {
 		return nil, err
@@ -57,6 +66,9 @@ func (s *dogsService) Get(ctx context.Context, filter interface{}) ([]models.Dog
 func (s *dogsService) GetOne(ctx context.Context, id uuid.UUID) (*models.Dog, error) {
 	dog := new(models.Dog)
 	if err := s.db.First(dog, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrNotFound
+		}
 		return nil, err
 	}
 	return dog, nil
@@ -70,10 +82,11 @@ func (s *dogsService) Update(ctx context.Context, id uuid.UUID, dog *models.Dog)
 		Birthdate: dog.Birthdate,
 		Weight:    dog.Weight,
 	})
-
-	if db.RowsAffected < 1 {
-		return fmt.Errorf("row with id=%v cannot be updated because it doesn't exist", id)
+	if err := db.Error; err != nil {
+		return err
 	}
-
-	return db.Error
+	if db.RowsAffected < 1 {
+		return ErrNotFound
+	}
+	return nil
 }

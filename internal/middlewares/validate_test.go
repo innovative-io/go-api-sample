@@ -6,37 +6,20 @@ import (
 	"net/http/httptest"
 	"regexp"
 	"testing"
-
-	"github.com/gin-contrib/cors"
-	"github.com/gin-gonic/gin"
-	"github.com/one-byte-data/go-api-sample/cmd/tests"
-	"gorm.io/driver/postgres"
 )
 
 func TestIntegrationValidateHeader(t *testing.T) {
 	if m := flag.Lookup("test.run").Value.String(); m == "" || !regexp.MustCompile(m).MatchString(t.Name()) {
 		t.Skip("skipping as execution was not requested explicitly using go test -run")
 	}
-	
-	teardownTests := tests.SetupTests(t, postgres.Open(tests.ConnectionString))
-	defer teardownTests(t)
 
-	router := gin.Default()
-	config := cors.DefaultConfig()
-	config.AllowAllOrigins = true
-	config.AllowHeaders = []string{"Content-Type", "Authorization"}
-	config.AllowCredentials = true
-	router.Use(cors.New(config))
-	router.Use(ValidateHeader())
-
-	health := router.Group("/health")
-	{
-		health.GET("", func(c *gin.Context) {
-			c.JSON(http.StatusOK, gin.H{
-				"message": "ok",
-			})
-		})
-	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"message":"ok"}`))
+	})
+	handler := ValidateHeader(mux)
 
 	type args struct {
 		method   string
@@ -75,11 +58,9 @@ func TestIntegrationValidateHeader(t *testing.T) {
 		for key, value := range tt.args.header {
 			req.Header.Add(key, value)
 		}
-		router.ServeHTTP(w, req)
-
-		if tt.wantCode != w.Code {
-			t.Errorf("ValidateHeader() error = %v, wantCode %v", w.Code, tt.wantCode)
-			return
+		handler.ServeHTTP(w, req)
+		if w.Code != tt.wantCode {
+			t.Errorf("%s: expected status %d, got %d", tt.name, tt.wantCode, w.Code)
 		}
 	}
 }

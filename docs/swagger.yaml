@@ -1,4 +1,61 @@
 basePath: /
+definitions:
+  models.Cat:
+    properties:
+      birthdate:
+        type: string
+      breed:
+        maxLength: 24
+        minLength: 2
+        type: string
+      color:
+        maxLength: 24
+        minLength: 2
+        type: string
+      id:
+        type: string
+      name:
+        maxLength: 24
+        minLength: 2
+        type: string
+      weight:
+        minimum: 1
+        type: integer
+    required:
+    - birthdate
+    - breed
+    - color
+    - name
+    - weight
+    type: object
+  models.Dog:
+    properties:
+      birthdate:
+        type: string
+      breed:
+        maxLength: 24
+        minLength: 2
+        type: string
+      color:
+        maxLength: 24
+        minLength: 2
+        type: string
+      id:
+        type: string
+      name:
+        maxLength: 24
+        minLength: 2
+        type: string
+      weight:
+        minimum: 1
+        type: integer
+    required:
+    - birthdate
+    - breed
+    - color
+    - name
+    - weight
+    type: object
 host: localhost:8080
 info:
   contact:
@@ -12,5 +69,340 @@ info:
   termsOfService: http://swagger.io/terms/
   title: Go API Sample
   version: "1.0"
-paths: {}
+paths:
+  /cats:
+    get:
+      description: get a list of cats
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: ok
+          schema:
+            items:
+              $ref: '#/definitions/models.Cat'
+            type: array
+        "400":
+          description: ok
+          schema:
+            type: string
+        "404":
+          description: ok
+          schema:
+            type: string
+        "500":
+          description: ok
+          schema:
+            type: string
+      summary: Gets all the cats in the database
+    post:
+      consumes:
+      - application/json
+      description: adds a cat
+      parameters:
+      - description: Cat
+        in: body
+        name: message
+        required: true
+        schema:
+          $ref: '#/definitions/models.Cat'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: answer
+          schema:
+            type: string
+        "400":
+          description: ok
+          schema:
+            type: string
+        "500":
+          description: ok
+          schema:
+            type: string
+      summary: Adds a cat
+  /cats/{cat_id}:
+    delete:
+      description: deletes a cat
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: ok
+          schema: {}
+        "400":
+          description: ok
+          schema:
+            type: string
+        "404":
+          description: ok
+          schema:
+            type: string
+        "500":
+          description: ok
+          schema:
+            type: string
+      summary: Deletes a cat by ID
+    get:
+      description: get a cat
+      parameters:
+      - description: Cat ID
+        in: path
+        name: cat_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: ok
+          schema:
+            $ref: '#/definitions/models.Cat'
+        "400":
+          description: ok
+          schema:
+            type: string
+        "404":
+          description: ok
+          schema:
+            type: string
+        "500":
+          description: ok
+          schema:
+            type: string
+      summary: Gets a cat by ID
+    put:
+      consumes:
+      - application/json
+      description: updates a cat
+      parameters:
+      - description: Cat ID
+        in: path
+        name: cat_id
+        required: true
+        type: string
+      - description: Cat
+        in: body
+        name: message
+        required: true
+        schema:
+          $ref: '#/definitions/models.Cat'
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: answer
+          schema:
+            type: string
+        "400":
+          description: ok
+          schema:
+            type: string
+        "404":
+          description: ok
+          schema:
+            type: string
+        "500":
+          description: ok
+          schema:
+            type: string
+      summary: Updates a cat by ID
+  /cats/count:
+    get:
+      description: returns the total number of cats
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: ok
+          schema:
+            additionalProperties:
+              format: int64
+              type: integer
+            type: object
+        "500":
+          description: error
+          schema:
+            type: string
+      summary: Gets the total count of cats
+  /dogs:
+    get:
+      description: get a list of dogs
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: ok
+          schema:
+            items:
+              $ref: '#/definitions/models.Dog'
+            type: array
+        "400":
+          description: ok
+          schema:
+            type: string
+        "404":
+          description: ok
+          schema:
+            type: string
+        "500":
+          description: ok
+          schema:
+            type: string
+      summary: Gets all the dogs in the database
+    post:
+      consumes:
+      - application/json
+      description: adds a dog
+      parameters:
+      - description: Dog
+        in: body
+        name: message
+        required: true
+        schema:
+          $ref: '#/definitions/models.Dog'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: answer
+          schema:
+            type: string
+        "400":
+          description: ok
+          schema:
+            type: string
+        "500":
+          description: ok
+          schema:
+            type: string
+      summary: Adds a dog
+  /dogs/{dog_id}:
+    delete:
+      description: deletes a dog
+      parameters:
+      - description: Dog ID
+        in: path
+        name: dog_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: ok
+          schema: {}
+        "400":
+          description: ok
+          schema:
+            type: string
+        "404":
+          description: ok
+          schema:
+            type: string
+        "500":
+          description: ok
+          schema:
+            type: string
+      summary: Deletes a dog by ID
+    get:
+      description: get a dog
+      parameters:
+      - description: Dog ID
+        in: path
+        name: dog_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: ok
+          schema:
+            $ref: '#/definitions/models.Dog'
+        "400":
+          description: ok
+          schema:
+            type: string
+        "404":
+          description: ok
+          schema:
+            type: string
+        "500":
+          description: ok
+          schema:
+            type: string
+      summary: Gets a dog by ID
+    put:
+      consumes:
+      - application/json
+      description: updates a dog
+      parameters:
+      - description: Dog ID
+        in: path
+        name: dog_id
+        required: true
+        type: string
+      - description: Dog
+        in: body
+        name: message
+        required: true
+        schema:
+          $ref: '#/definitions/models.Dog'
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: answer
+          schema:
+            type: string
+        "400":
+          description: ok
+          schema:
+            type: string
+        "404":
+          description: ok
+          schema:
+            type: string
+        "500":
+          description: ok
+          schema:
+            type: string
+      summary: Updates a dog by ID
+  /dogs/count:
+    get:
+      description: returns the total number of dogs
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: ok
+          schema:
+            additionalProperties:
+              format: int64
+              type: integer
+            type: object
+        "500":
+          description: error
+          schema:
+            type: string
+      summary: Gets the total count of dogs
+  /health:
+    get:
+      description: gets the status of the server
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: ok
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "503":
+          description: database unavailable
+          schema:
+            type: string
+      summary: Gets the status of the server
 swagger: "2.0"

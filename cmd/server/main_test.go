@@ -1,7 +1,9 @@
 package main
 
 import (
+	"flag"
 	"os"
+	"regexp"
 	"testing"
 )
 
@@ -68,18 +70,44 @@ func Test_setupDatabase(t *testing.T) {
 		wantPanic bool
 	}{
 		{
+			name:      "Should panic with empty connection string",
+			args:      args{connectionString: ""},
+			wantPanic: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			defer func() {
+				r := recover()
+				if (r != nil) != tt.wantPanic {
+					t.Errorf("setupDatabase() recover = %v, wantPanic %v", r, tt.wantPanic)
+				}
+			}()
+
+			setupDatabase(tt.args.connectionString)
+		})
+	}
+}
+
+func TestIntegration_setupDatabase(t *testing.T) {
+	if m := flag.Lookup("test.run").Value.String(); m == "" || !regexp.MustCompile(m).MatchString(t.Name()) {
+		t.Skip("skipping as execution was not requested explicitly using go test -run")
+	}
+
+	type args struct {
+		connectionString string
+	}
+	tests := []struct {
+		name      string
+		args      args
+		wantPanic bool
+	}{
+		{
 			name: "Should be able to connect to database",
 			args: args{
-				connectionString: "postgresql://root@cockroachdb:26257/defaultdb?sslmode=disable",
+				connectionString: "postgresql://go_api:go_api@localhost:5432/animals?sslmode=disable",
 			},
 			wantPanic: false,
-		},
-		{
-			name: "Should panic",
-			args: args{
-				connectionString: "",
-			},
-			wantPanic: true,
 		},
 	}
 	for _, tt := range tests {

@@ -16,8 +16,8 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/google/uuid"
-	"github.com/one-byte-data/go-api-sample/cmd/tests"
-	"github.com/one-byte-data/go-api-sample/internal/models"
+	"github.com/innovative-io/go-api-sample/cmd/tests"
+	"github.com/innovative-io/go-api-sample/internal/models"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -26,10 +26,7 @@ func BenchmarkCatInserts(b *testing.B) {
 	teardownTests := tests.SetupTests(b, postgres.Open(tests.ConnectionString))
 	defer teardownTests(b)
 
-	router, err := SetupRouter(tests.DB)
-	if err != nil {
-		panic(err)
-	}
+	router := NewRouter(tests.DB)
 
 	for i := 0; i < b.N; i++ {
 		cat := &models.Cat{
@@ -68,10 +65,7 @@ func TestCatsDelete(t *testing.T) {
 		t.Fatalf("an error '%s' was not expected when opening a stub database connection", err)
 	}
 
-	router, err := SetupRouter(gdb)
-	if err != nil {
-		panic(err)
-	}
+	router := NewRouter(gdb)
 
 	testID := uuid.New()
 
@@ -125,10 +119,7 @@ func TestIntegrationCatsDelete(t *testing.T) {
 	teardownTests := tests.SetupTests(t, postgres.Open(tests.ConnectionString))
 	defer teardownTests(t)
 
-	router, err := SetupRouter(tests.DB)
-	if err != nil {
-		panic(err)
-	}
+	router := NewRouter(tests.DB)
 
 	type args struct {
 		method   string
@@ -164,8 +155,8 @@ func TestIntegrationCatsDelete(t *testing.T) {
 				method:   "DELETE",
 				endpoint: fmt.Sprintf("/cats/%s", uuid.New().String()),
 			},
-			wantResponse: "{\"message\":\"there was an error\"}",
-			wantCode:     http.StatusInternalServerError,
+			wantResponse: "{\"message\":\"not found\"}",
+			wantCode:     http.StatusNotFound,
 		},
 	}
 	for _, tt := range tests {
@@ -192,10 +183,7 @@ func TestIntegrationCatsGet(t *testing.T) {
 	teardownTests := tests.SetupTests(t, postgres.Open(tests.ConnectionString))
 	defer teardownTests(t)
 
-	router, err := SetupRouter(tests.DB)
-	if err != nil {
-		panic(err)
-	}
+	router := NewRouter(tests.DB)
 
 	type args struct {
 		method   string
@@ -248,10 +236,7 @@ func TestIntegrationCatsGetOne(t *testing.T) {
 	teardownTests := tests.SetupTests(t, postgres.Open(tests.ConnectionString))
 	defer teardownTests(t)
 
-	router, err := SetupRouter(tests.DB)
-	if err != nil {
-		panic(err)
-	}
+	router := NewRouter(tests.DB)
 
 	type args struct {
 		method   string
@@ -315,10 +300,7 @@ func TestIntegrationCatsPost(t *testing.T) {
 	teardownTests := tests.SetupTests(t, postgres.Open(tests.ConnectionString))
 	defer teardownTests(t)
 
-	router, err := SetupRouter(tests.DB)
-	if err != nil {
-		panic(err)
-	}
+	router := NewRouter(tests.DB)
 
 	type args struct {
 		method   string
@@ -344,7 +326,7 @@ func TestIntegrationCatsPost(t *testing.T) {
 					Weight:    5,
 				},
 			},
-			wantResponse: "created",
+			wantResponse: "id",
 			wantCode:     http.StatusCreated,
 		},
 		{
@@ -411,10 +393,7 @@ func TestIntegrationCatsPut(t *testing.T) {
 	teardownTests := tests.SetupTests(t, postgres.Open(tests.ConnectionString))
 	defer teardownTests(t)
 
-	router, err := SetupRouter(tests.DB)
-	if err != nil {
-		panic(err)
-	}
+	router := NewRouter(tests.DB)
 
 	type args struct {
 		method   string
@@ -440,7 +419,7 @@ func TestIntegrationCatsPut(t *testing.T) {
 					Weight:    20,
 				},
 			},
-			wantResponse: "updated",
+			wantResponse: "id",
 			wantCode:     http.StatusAccepted,
 		},
 		{
@@ -512,5 +491,53 @@ func TestIntegrationCatsPut(t *testing.T) {
 		if !strings.Contains(w.Body.String(), tt.wantResponse) {
 			t.Errorf("CatsPut() error = %v, wantCode %v", w.Body.String(), tt.wantResponse)
 		}
+	}
+}
+
+func TestCatsCount(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("an error '%s' was not expected when opening a stub database connection", err)
+	}
+	defer db.Close()
+
+	gdb, err := gorm.Open(postgres.Dialector{
+		Config: &postgres.Config{Conn: db},
+	})
+	if err != nil {
+		t.Fatalf("an error '%s' was not expected when opening a stub database connection", err)
+	}
+
+	router := NewRouter(gdb)
+
+	tests := []struct {
+		name         string
+		wantResponse string
+		wantCode     int
+	}{
+		{
+			name:         "Should return count of cats",
+			wantResponse: `{"count":5}`,
+			wantCode:     http.StatusOK,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock.ExpectQuery(`SELECT count\(\*\)`).
+				WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(5))
+
+			w := httptest.NewRecorder()
+			req, _ := http.NewRequest("GET", "/cats/count", nil)
+			router.ServeHTTP(w, req)
+
+			if tt.wantCode != w.Code {
+				t.Errorf("CatsCount() error = %v, wantCode %v", w.Code, tt.wantCode)
+				return
+			}
+
+			if !reflect.DeepEqual(tt.wantResponse, w.Body.String()) {
+				t.Errorf("CatsCount() error = %v, want %v", w.Body.String(), tt.wantResponse)
+			}
+		})
 	}
 }

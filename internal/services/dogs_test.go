@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/one-byte-data/go-api-sample/cmd/tests"
-	"github.com/one-byte-data/go-api-sample/internal/models"
+	"github.com/innovative-io/go-api-sample/cmd/tests"
+	"github.com/innovative-io/go-api-sample/internal/models"
 
 	"github.com/google/uuid"
 	"gorm.io/driver/postgres"
@@ -233,8 +233,7 @@ func TestIntegration_dogsService_Get(t *testing.T) {
 		db *gorm.DB
 	}
 	type args struct {
-		ctx    context.Context
-		filter interface{}
+		ctx context.Context
 	}
 	tests := []struct {
 		name      string
@@ -246,7 +245,7 @@ func TestIntegration_dogsService_Get(t *testing.T) {
 		{
 			name:      "Should get all the dogs",
 			fields:    fields{db: tests.DB},
-			args:      args{ctx: context.Background(), filter: nil},
+			args:      args{ctx: context.Background()},
 			wantCount: 4,
 			wantErr:   false,
 		},
@@ -256,7 +255,7 @@ func TestIntegration_dogsService_Get(t *testing.T) {
 			s := &dogsService{
 				db: tt.fields.db,
 			}
-			got, err := s.Get(tt.args.ctx, tt.args.filter)
+			got, err := s.Get(tt.args.ctx)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("dogsService.Get() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -267,7 +266,6 @@ func TestIntegration_dogsService_Get(t *testing.T) {
 		})
 	}
 }
-
 func TestIntegration_dogsService_GetOne(t *testing.T) {
 	if m := flag.Lookup("test.run").Value.String(); m == "" || !regexp.MustCompile(m).MatchString(t.Name()) {
 		t.Skip("skipping as execution was not requested explicitly using go test -run")

@@ -6,11 +6,11 @@ import (
 	"os"
 	"testing"
 
-	"github.com/one-byte-data/go-api-sample/internal/models"
+	"github.com/innovative-io/go-api-sample/internal/models"
 	"gorm.io/gorm"
 )
 
-var ConnectionString = "postgresql://root@cockroachdb:26257/defaultdb?sslmode=disable"
+var ConnectionString = "postgresql://go_api:go_api@localhost:5432/animals?sslmode=disable"
 
 var DB *gorm.DB
 

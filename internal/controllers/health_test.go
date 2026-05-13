@@ -8,9 +8,37 @@ import (
 	"regexp"
 	"testing"
 
-	"github.com/one-byte-data/go-api-sample/cmd/tests"
+	sqlmock "github.com/DATA-DOG/go-sqlmock"
+	"github.com/innovative-io/go-api-sample/cmd/tests"
 	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
 )
+
+func TestHealthGet(t *testing.T) {
+	db, _, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("unexpected error opening stub db: %s", err)
+	}
+	defer db.Close()
+
+	gdb, err := gorm.Open(postgres.Dialector{Config: &postgres.Config{Conn: db}})
+	if err != nil {
+		t.Fatalf("unexpected error opening gorm db: %s", err)
+	}
+
+	router := NewRouter(gdb)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/health", nil)
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("HealthGet() status = %d, want %d", w.Code, http.StatusOK)
+	}
+	if want := `{"message":"ok"}`; w.Body.String() != want {
+		t.Errorf("HealthGet() body = %q, want %q", w.Body.String(), want)
+	}
+}
 
 func TestIntegrationHealthGet(t *testing.T) {
 	if m := flag.Lookup("test.run").Value.String(); m == "" || !regexp.MustCompile(m).MatchString(t.Name()) {
@@ -20,10 +48,7 @@ func TestIntegrationHealthGet(t *testing.T) {
 	teardownTests := tests.SetupTests(t, postgres.Open(tests.ConnectionString))
 	defer teardownTests(t)
 
-	router, err := SetupRouter(tests.DB)
-	if err != nil {
-		panic(err)
-	}
+	router := NewRouter(tests.DB)
 
 	type args struct {
 		method   string

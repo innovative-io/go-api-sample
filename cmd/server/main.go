@@ -1,17 +1,20 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"log/slog"
+	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
-	_ "github.com/one-byte-data/go-api-sample/docs"
-	"github.com/one-byte-data/go-api-sample/internal/controllers"
-	"github.com/one-byte-data/go-api-sample/internal/models"
+	"github.com/innovative-io/go-api-sample/internal/controllers"
+	"github.com/innovative-io/go-api-sample/internal/models"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
-
-	swaggerFiles "github.com/swaggo/files"
-	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
 var version string = "development"
@@ -33,18 +36,45 @@ var version string = "development"
 func main() {
 	printVersion()
 
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+
 	db := setupDatabase(getConnectionString())
+	router := controllers.NewRouter(db)
 
-	router, err := controllers.SetupRouter(db)
-	if err != nil {
-		panic(err)
+	srv := &http.Server{
+		Addr:         ":" + port,
+		Handler:      router,
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		IdleTimeout:  60 * time.Second,
 	}
 
-	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
-	if err := router.Run(); err != nil {
-		panic(err)
+	go func() {
+		slog.Info("server starting", "addr", srv.Addr)
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			slog.Error("server error", "error", err)
+			os.Exit(1)
+		}
+	}()
+
+	<-ctx.Done()
+	slog.Info("shutting down")
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		slog.Error("shutdown error", "error", err)
+		os.Exit(1)
 	}
+
+	slog.Info("server stopped")
 }
 
 func getConnectionString() string {

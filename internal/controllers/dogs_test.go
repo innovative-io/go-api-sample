@@ -14,21 +14,19 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gin-gonic/gin"
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/google/uuid"
-	"github.com/one-byte-data/go-api-sample/cmd/tests"
-	"github.com/one-byte-data/go-api-sample/internal/models"
+	"github.com/innovative-io/go-api-sample/cmd/tests"
+	"github.com/innovative-io/go-api-sample/internal/models"
 	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
 )
 
 func BenchmarkDogInserts(b *testing.B) {
 	teardownTests := tests.SetupTests(b, postgres.Open(tests.ConnectionString))
 	defer teardownTests(b)
 
-	router, err := SetupRouter(tests.DB)
-	if err != nil {
-		panic(err)
-	}
+	router := NewRouter(tests.DB)
 
 	for i := 0; i < b.N; i++ {
 		dog := &models.Dog{
@@ -54,22 +52,64 @@ func BenchmarkDogInserts(b *testing.B) {
 }
 
 func TestDogsDelete(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("an error '%s' was not expected when opening a stub database connection", err)
+	}
+	defer db.Close()
+
+	gdb, err := gorm.Open(postgres.Dialector{
+		Config: &postgres.Config{Conn: db},
+	})
+	if err != nil {
+		t.Fatalf("an error '%s' was not expected when opening a stub database connection", err)
+	}
+
+	router := NewRouter(gdb)
+
+	testID := uuid.New()
+
 	type args struct {
-		c *gin.Context
+		method   string
+		endpoint string
 	}
 	tests := []struct {
-		name string
-		args args
+		name         string
+		args         args
+		wantResponse string
+		wantCode     int
 	}{
-		// TODO: Add test cases.
+		{
+			name: "Should delete a dog by ID",
+			args: args{
+				method:   "DELETE",
+				endpoint: fmt.Sprintf("/dogs/%s", testID.String()),
+			},
+			wantResponse: fmt.Sprintf("{\"deleted\":\"%s\"}", testID.String()),
+			wantCode:     http.StatusOK,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			DogsDelete(tt.args.c)
+			mock.ExpectBegin()
+			mock.ExpectExec(`DELETE FROM "dogs" WHERE`).WithArgs(sqlmock.AnyArg()).WillReturnResult(sqlmock.NewResult(1, 1))
+			mock.ExpectCommit()
+
+			w := httptest.NewRecorder()
+			req, _ := http.NewRequest(tt.args.method, tt.args.endpoint, nil)
+			router.ServeHTTP(w, req)
+
+			if tt.wantCode != w.Code {
+				t.Errorf("DogsDelete() error = %v, wantCode %v", w.Code, tt.wantCode)
+				return
+			}
+
+			if !reflect.DeepEqual(tt.wantResponse, w.Body.String()) {
+				t.Errorf("DogsDelete() error = %v, wantCode %v", w.Body.String(), tt.wantResponse)
+			}
 		})
 	}
 }
-
 
 func TestIntegrationDogsDelete(t *testing.T) {
 	if m := flag.Lookup("test.run").Value.String(); m == "" || !regexp.MustCompile(m).MatchString(t.Name()) {
@@ -79,10 +119,7 @@ func TestIntegrationDogsDelete(t *testing.T) {
 	teardownTests := tests.SetupTests(t, postgres.Open(tests.ConnectionString))
 	defer teardownTests(t)
 
-	router, err := SetupRouter(tests.DB)
-	if err != nil {
-		panic(err)
-	}
+	router := NewRouter(tests.DB)
 
 	type args struct {
 		method   string
@@ -118,8 +155,8 @@ func TestIntegrationDogsDelete(t *testing.T) {
 				method:   "DELETE",
 				endpoint: fmt.Sprintf("/dogs/%s", uuid.New().String()),
 			},
-			wantResponse: "{\"message\":\"there was an error\"}",
-			wantCode:     http.StatusInternalServerError,
+			wantResponse: "{\"message\":\"not found\"}",
+			wantCode:     http.StatusNotFound,
 		},
 	}
 	for _, tt := range tests {
@@ -146,10 +183,7 @@ func TestIntegrationDogsGet(t *testing.T) {
 	teardownTests := tests.SetupTests(t, postgres.Open(tests.ConnectionString))
 	defer teardownTests(t)
 
-	router, err := SetupRouter(tests.DB)
-	if err != nil {
-		panic(err)
-	}
+	router := NewRouter(tests.DB)
 
 	type args struct {
 		method   string
@@ -202,10 +236,7 @@ func TestIntegrationDogsGetOne(t *testing.T) {
 	teardownTests := tests.SetupTests(t, postgres.Open(tests.ConnectionString))
 	defer teardownTests(t)
 
-	router, err := SetupRouter(tests.DB)
-	if err != nil {
-		panic(err)
-	}
+	router := NewRouter(tests.DB)
 
 	type args struct {
 		method   string
@@ -269,10 +300,7 @@ func TestIntegrationDogsPost(t *testing.T) {
 	teardownTests := tests.SetupTests(t, postgres.Open(tests.ConnectionString))
 	defer teardownTests(t)
 
-	router, err := SetupRouter(tests.DB)
-	if err != nil {
-		panic(err)
-	}
+	router := NewRouter(tests.DB)
 
 	type args struct {
 		method   string
@@ -298,7 +326,7 @@ func TestIntegrationDogsPost(t *testing.T) {
 					Weight:    55,
 				},
 			},
-			wantResponse: "created",
+			wantResponse: "id",
 			wantCode:     http.StatusCreated,
 		},
 		{
@@ -365,10 +393,7 @@ func TestIntegrationDogsPut(t *testing.T) {
 	teardownTests := tests.SetupTests(t, postgres.Open(tests.ConnectionString))
 	defer teardownTests(t)
 
-	router, err := SetupRouter(tests.DB)
-	if err != nil {
-		panic(err)
-	}
+	router := NewRouter(tests.DB)
 
 	type args struct {
 		method   string
@@ -394,7 +419,7 @@ func TestIntegrationDogsPut(t *testing.T) {
 					Weight:    65,
 				},
 			},
-			wantResponse: "updated",
+			wantResponse: "id",
 			wantCode:     http.StatusAccepted,
 		},
 		{
@@ -466,5 +491,53 @@ func TestIntegrationDogsPut(t *testing.T) {
 		if !strings.Contains(w.Body.String(), tt.wantResponse) {
 			t.Errorf("DogsPut() error = %v, wantCode %v", w.Body.String(), tt.wantResponse)
 		}
+	}
+}
+
+func TestDogsCount(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("an error '%s' was not expected when opening a stub database connection", err)
+	}
+	defer db.Close()
+
+	gdb, err := gorm.Open(postgres.Dialector{
+		Config: &postgres.Config{Conn: db},
+	})
+	if err != nil {
+		t.Fatalf("an error '%s' was not expected when opening a stub database connection", err)
+	}
+
+	router := NewRouter(gdb)
+
+	tests := []struct {
+		name         string
+		wantResponse string
+		wantCode     int
+	}{
+		{
+			name:         "Should return count of dogs",
+			wantResponse: `{"count":7}`,
+			wantCode:     http.StatusOK,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock.ExpectQuery(`SELECT count\(\*\)`).
+				WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(7))
+
+			w := httptest.NewRecorder()
+			req, _ := http.NewRequest("GET", "/dogs/count", nil)
+			router.ServeHTTP(w, req)
+
+			if tt.wantCode != w.Code {
+				t.Errorf("DogsCount() error = %v, wantCode %v", w.Code, tt.wantCode)
+				return
+			}
+
+			if !reflect.DeepEqual(tt.wantResponse, w.Body.String()) {
+				t.Errorf("DogsCount() error = %v, want %v", w.Body.String(), tt.wantResponse)
+			}
+		})
 	}
 }

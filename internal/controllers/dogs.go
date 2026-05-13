@@ -1,12 +1,12 @@
 package controllers
 
 import (
-	"fmt"
+	"errors"
 	"net/http"
 
-	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/one-byte-data/go-api-sample/internal/models"
+	"github.com/innovative-io/go-api-sample/internal/models"
+	"github.com/innovative-io/go-api-sample/internal/services"
 )
 
 // @Summary Deletes a dog by ID
@@ -18,29 +18,38 @@ import (
 // @Failure      404   {string}   string  "ok"
 // @Failure      500   {string}   string  "ok"
 // @Router /dogs/{dog_id} [delete]
-func DogsDelete(c *gin.Context) {
-	id, err := uuid.Parse(c.Param("id"))
+func (r *Router) DogsDelete(w http.ResponseWriter, req *http.Request) {
+	id, err := uuid.Parse(req.PathValue("id"))
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
-			"message": "invalid id",
-		})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"message": "invalid id"})
 		return
 	}
 
-	if err := dogsService.Delete(c.Request.Context(), id); err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-			"message": "there was an error",
-		})
+	if err := r.dogs.Delete(req.Context(), id); err != nil {
+		if errors.Is(err, services.ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]any{"message": "not found"})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"message": "there was an error"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"deleted": id.String(),
-	})
+	writeJSON(w, http.StatusOK, map[string]any{"deleted": id.String()})
 }
 
-func DogsCount(c *gin.Context) {
-
+// @Summary Gets the total count of dogs
+// @Description returns the total number of dogs
+// @Produce  json
+// @Success 200 {object} map[string]int64 "ok"
+// @Failure 500 {string} string "error"
+// @Router /dogs/count [get]
+func (r *Router) DogsCount(w http.ResponseWriter, req *http.Request) {
+	count, err := r.dogs.Count(req.Context())
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"message": "there was an error"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"count": count})
 }
 
 // @Summary Gets all the dogs in the database
@@ -51,15 +60,13 @@ func DogsCount(c *gin.Context) {
 // @Failure      404   {string}   string  "ok"
 // @Failure      500   {string}   string  "ok"
 // @Router /dogs [get]
-func DogsGet(c *gin.Context) {
-	dogs, err := dogsService.Get(c.Request.Context(), nil)
+func (r *Router) DogsGet(w http.ResponseWriter, req *http.Request) {
+	dogs, err := r.dogs.Get(req.Context())
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-			"message": "there was an error",
-		})
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"message": "there was an error"})
 		return
 	}
-	c.JSON(http.StatusOK, dogs)
+	writeJSON(w, http.StatusOK, dogs)
 }
 
 // @Summary Gets a dog by ID
@@ -71,23 +78,23 @@ func DogsGet(c *gin.Context) {
 // @Failure      404   {string}   string  "ok"
 // @Failure      500   {string}   string  "ok"
 // @Router /dogs/{dog_id} [get]
-func DogsGetOne(c *gin.Context) {
-	id, err := uuid.Parse(c.Param("id"))
+func (r *Router) DogsGetOne(w http.ResponseWriter, req *http.Request) {
+	id, err := uuid.Parse(req.PathValue("id"))
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
-			"message": "invalid id",
-		})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"message": "invalid id"})
 		return
 	}
 
-	dog, err := dogsService.GetOne(c.Request.Context(), id)
+	dog, err := r.dogs.GetOne(req.Context(), id)
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-			"message": "there was an error",
-		})
+		if errors.Is(err, services.ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]any{"message": "not found"})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"message": "there was an error"})
 		return
 	}
-	c.JSON(http.StatusOK, dog)
+	writeJSON(w, http.StatusOK, dog)
 }
 
 // @Summary Adds a dog
@@ -95,17 +102,14 @@ func DogsGetOne(c *gin.Context) {
 // @Accept   json
 // @Produce  json
 // @Param        message  body      models.Dog  true  "Dog"
-// @Success      204   {string}  string  "answer"
+// @Success      201   {string}  string  "answer"
 // @Failure      400   {string}   string  "ok"
-// @Failure      404   {string}   string  "ok"
 // @Failure      500   {string}   string  "ok"
 // @Router /dogs [post]
-func DogsPost(c *gin.Context) {
+func (r *Router) DogsPost(w http.ResponseWriter, req *http.Request) {
 	dog := new(models.Dog)
-	if c.ShouldBind(dog) != nil {
-		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
-			"message": "Bad request body",
-		})
+	if err := r.bind(w, req, dog); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"message": "Bad request body"})
 		return
 	}
 
@@ -113,16 +117,12 @@ func DogsPost(c *gin.Context) {
 		dog.ID = uuid.New()
 	}
 
-	id, err := dogsService.Add(c.Request.Context(), dog)
+	id, err := r.dogs.Add(req.Context(), dog)
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-			"message": "there was an error",
-		})
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"message": "there was an error"})
 		return
 	}
-	c.JSON(http.StatusCreated, gin.H{
-		"message": fmt.Sprintf("id %s created", id.String()),
-	})
+	writeJSON(w, http.StatusCreated, map[string]any{"id": id.String()})
 }
 
 // @Summary Updates a dog by ID
@@ -131,35 +131,31 @@ func DogsPost(c *gin.Context) {
 // @Produce  json
 // @Param        dog_id    path      string     true  "Dog ID"
 // @Param        message  body      models.Dog  true  "Dog"
-// @Success      204   {string}  string  "answer"
+// @Success      202   {string}  string  "answer"
 // @Failure      400   {string}   string  "ok"
 // @Failure      404   {string}   string  "ok"
 // @Failure      500   {string}   string  "ok"
 // @Router /dogs/{dog_id} [put]
-func DogsPut(c *gin.Context) {
+func (r *Router) DogsPut(w http.ResponseWriter, req *http.Request) {
 	dog := new(models.Dog)
-	if c.ShouldBind(&dog) != nil {
-		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
-			"message": "Bad request body",
-		})
+	if err := r.bind(w, req, dog); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"message": "Bad request body"})
 		return
 	}
 
-	id, err := uuid.Parse(c.Param("id"))
+	id, err := uuid.Parse(req.PathValue("id"))
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
-			"message": "invalid id",
-		})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"message": "invalid id"})
 		return
 	}
 
-	if err := dogsService.Update(c.Request.Context(), id, dog); err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-			"message": "there was an error",
-		})
+	if err := r.dogs.Update(req.Context(), id, dog); err != nil {
+		if errors.Is(err, services.ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]any{"message": "not found"})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"message": "there was an error"})
 		return
 	}
-	c.JSON(http.StatusAccepted, gin.H{
-		"message": fmt.Sprintf("id %s updated", id.String()),
-	})
+	writeJSON(w, http.StatusAccepted, map[string]any{"id": id.String()})
 }

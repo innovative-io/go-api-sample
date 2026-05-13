@@ -1,12 +1,12 @@
 package controllers
 
 import (
-	"fmt"
+	"errors"
 	"net/http"
 
-	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/one-byte-data/go-api-sample/internal/models"
+	"github.com/innovative-io/go-api-sample/internal/models"
+	"github.com/innovative-io/go-api-sample/internal/services"
 )
 
 // @Summary Deletes a cat by ID
@@ -17,29 +17,38 @@ import (
 // @Failure      404   {string}   string  "ok"
 // @Failure      500   {string}   string  "ok"
 // @Router /cats/{cat_id} [delete]
-func CatsDelete(c *gin.Context) {
-	id, err := uuid.Parse(c.Param("id"))
+func (r *Router) CatsDelete(w http.ResponseWriter, req *http.Request) {
+	id, err := uuid.Parse(req.PathValue("id"))
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
-			"message": "invalid id",
-		})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"message": "invalid id"})
 		return
 	}
 
-	if err := catsService.Delete(c.Request.Context(), id); err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-			"message": "there was an error",
-		})
+	if err := r.cats.Delete(req.Context(), id); err != nil {
+		if errors.Is(err, services.ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]any{"message": "not found"})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"message": "there was an error"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"deleted": id.String(),
-	})
+	writeJSON(w, http.StatusOK, map[string]any{"deleted": id.String()})
 }
 
-func CatsCount(c *gin.Context) {
-
+// @Summary Gets the total count of cats
+// @Description returns the total number of cats
+// @Produce  json
+// @Success 200 {object} map[string]int64 "ok"
+// @Failure 500 {string} string "error"
+// @Router /cats/count [get]
+func (r *Router) CatsCount(w http.ResponseWriter, req *http.Request) {
+	count, err := r.cats.Count(req.Context())
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"message": "there was an error"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"count": count})
 }
 
 // @Summary Gets all the cats in the database
@@ -50,15 +59,13 @@ func CatsCount(c *gin.Context) {
 // @Failure      404   {string}   string  "ok"
 // @Failure      500   {string}   string  "ok"
 // @Router /cats [get]
-func CatsGet(c *gin.Context) {
-	cats, err := catsService.Get(c.Request.Context(), nil)
+func (r *Router) CatsGet(w http.ResponseWriter, req *http.Request) {
+	cats, err := r.cats.Get(req.Context())
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-			"message": "there was an error",
-		})
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"message": "there was an error"})
 		return
 	}
-	c.JSON(http.StatusOK, cats)
+	writeJSON(w, http.StatusOK, cats)
 }
 
 // @Summary Gets a cat by ID
@@ -70,23 +77,23 @@ func CatsGet(c *gin.Context) {
 // @Failure      404   {string}   string  "ok"
 // @Failure      500   {string}   string  "ok"
 // @Router /cats/{cat_id} [get]
-func CatsGetOne(c *gin.Context) {
-	id, err := uuid.Parse(c.Param("id"))
+func (r *Router) CatsGetOne(w http.ResponseWriter, req *http.Request) {
+	id, err := uuid.Parse(req.PathValue("id"))
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
-			"message": "invalid id",
-		})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"message": "invalid id"})
 		return
 	}
 
-	cat, err := catsService.GetOne(c.Request.Context(), id)
+	cat, err := r.cats.GetOne(req.Context(), id)
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-			"message": "there was an error",
-		})
+		if errors.Is(err, services.ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]any{"message": "not found"})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"message": "there was an error"})
 		return
 	}
-	c.JSON(http.StatusOK, cat)
+	writeJSON(w, http.StatusOK, cat)
 }
 
 // @Summary Adds a cat
@@ -94,17 +101,14 @@ func CatsGetOne(c *gin.Context) {
 // @Accept   json
 // @Produce  json
 // @Param        message  body      models.Cat  true  "Cat"
-// @Success      204   {string}  string  "answer"
+// @Success      201   {string}  string  "answer"
 // @Failure      400   {string}   string  "ok"
-// @Failure      404   {string}   string  "ok"
 // @Failure      500   {string}   string  "ok"
 // @Router /cats [post]
-func CatsPost(c *gin.Context) {
+func (r *Router) CatsPost(w http.ResponseWriter, req *http.Request) {
 	cat := new(models.Cat)
-	if c.ShouldBind(cat) != nil {
-		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
-			"message": "Bad request body",
-		})
+	if err := r.bind(w, req, cat); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"message": "Bad request body"})
 		return
 	}
 
@@ -112,16 +116,12 @@ func CatsPost(c *gin.Context) {
 		cat.ID = uuid.New()
 	}
 
-	id, err := catsService.Add(c.Request.Context(), cat)
+	id, err := r.cats.Add(req.Context(), cat)
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-			"message": "there was an error",
-		})
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"message": "there was an error"})
 		return
 	}
-	c.JSON(http.StatusCreated, gin.H{
-		"message": fmt.Sprintf("id %s created", id.String()),
-	})
+	writeJSON(w, http.StatusCreated, map[string]any{"id": id.String()})
 }
 
 // @Summary Updates a cat by ID
@@ -130,35 +130,31 @@ func CatsPost(c *gin.Context) {
 // @Produce  json
 // @Param        cat_id    path      string     true  "Cat ID"
 // @Param        message  body      models.Cat  true  "Cat"
-// @Success      204   {string}  string  "answer"
+// @Success      202   {string}  string  "answer"
 // @Failure      400   {string}   string  "ok"
 // @Failure      404   {string}   string  "ok"
 // @Failure      500   {string}   string  "ok"
 // @Router /cats/{cat_id} [put]
-func CatsPut(c *gin.Context) {
+func (r *Router) CatsPut(w http.ResponseWriter, req *http.Request) {
 	cat := new(models.Cat)
-	if c.ShouldBind(&cat) != nil {
-		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
-			"message": "Bad request body",
-		})
+	if err := r.bind(w, req, cat); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"message": "Bad request body"})
 		return
 	}
 
-	id, err := uuid.Parse(c.Param("id"))
+	id, err := uuid.Parse(req.PathValue("id"))
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
-			"message": "invalid id",
-		})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"message": "invalid id"})
 		return
 	}
 
-	if err := catsService.Update(c.Request.Context(), id, cat); err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-			"message": "there was an error",
-		})
+	if err := r.cats.Update(req.Context(), id, cat); err != nil {
+		if errors.Is(err, services.ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]any{"message": "not found"})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"message": "there was an error"})
 		return
 	}
-	c.JSON(http.StatusAccepted, gin.H{
-		"message": fmt.Sprintf("id %s updated", id.String()),
-	})
+	writeJSON(w, http.StatusAccepted, map[string]any{"id": id.String()})
 }

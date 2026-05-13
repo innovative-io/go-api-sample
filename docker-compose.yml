@@ -1,18 +1,24 @@
-version: '3'
-
 services:
-  cockroachdb:
-    image: cockroachdb/cockroach:latest
-    command: start-single-node --insecure --advertise-addr=cockroachdb
-    hostname: cockroachdb
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: go_api
+      POSTGRES_PASSWORD: go_api
+      POSTGRES_DB: animals
     ports:
-      - "26257:26257"
-      - "8088:8080"
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U go_api -d animals"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
   go-api-sample:
     build: .
     environment:
-      CONNECTION_STRING: "postgresql://root@cockroachdb:26257/defaultdb?sslmode=disable"
+      CONNECTION_STRING: "postgresql://go_api:go_api@postgres:5432/animals?sslmode=disable"
     ports:
       - "8080:8080"
+    restart: unless-stopped
     depends_on:
-      - cockroachdb
+      postgres:
+        condition: service_healthy

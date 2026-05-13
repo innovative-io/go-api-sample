@@ -1,19 +1,19 @@
 package middlewares
 
 import (
+	"encoding/json"
 	"net/http"
-
-	"github.com/gin-gonic/gin"
 )
 
-func ValidateHeader() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		if c.Request.Header.Get("X-Not-Valid") != "" {
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
-				"message": "not allowed",
-			})
+func ValidateHeader(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-Not-Valid") != "" {
+			data, _ := json.Marshal(map[string]any{"message": "not allowed"})
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusForbidden)
+			w.Write(data)
 			return
 		}
-		c.Next()
-	}
+		next.ServeHTTP(w, r)
+	})
 }
